@@ -8,7 +8,7 @@ fn main() {
         let line = io::stdin().read_line();
         debug!(fmt!("line: %?", line));
         let mut argv: ~[~str] = line.split_iter(' ').filter(|&x| x != "")
-                                 .transform(|x| x.to_owned()).collect();
+            .map(|x| x.to_owned()).collect();
         debug!(fmt!("argv %?", argv));
         
         if argv.len() > 0 {
