@@ -3,19 +3,24 @@ use std::{io, run, libc, c_str, str};
 #[fixed_stack_segment]
 fn main() {
     static CMD_PROMPT: &'static str = "gash";
+    static CMD_SEP: &'static str = "≻";
     static CMD_ERR: &'static str = "\\033[38;5;1m";
     static CMD_ERR_END: &'static str = "\\033[39m";
+    static CMD_CMD: &'static str = "\\033[38;5;6m";
+    static CMD_CMD_END: &'static str = "\\033[39m";
     static CMD_NUM: &'static str = "\\033[38;5;3m";
     static CMD_NUM_END: &'static str = "\\033[39m";
     let mut CMD_PATH: ~str = ~""; 
     let mut HISTORY: ~[~str] = ~[];
 
     loop {
+        let prompt: ~str =
         if CMD_PATH == ~"" {
-            print(CMD_PROMPT + " > ");
+            fmt!("%s%s%s%s ", CMD_CMD, CMD_PROMPT, CMD_CMD_END, CMD_SEP)
         } else {
-            print(CMD_PROMPT + " "+ CMD_PATH +" > ");
-        }
+            fmt!("%s%s%s %s%s ", CMD_CMD, CMD_PROMPT, CMD_CMD_END, CMD_PATH, CMD_SEP)
+        };
+        run::process_status("echo", [~"-e", prompt+"\\c"]);
 
         let line = io::stdin().read_line();
         debug!(fmt!("line: %?", line));
@@ -59,7 +64,26 @@ fn main() {
                         i += 1;
                     }
                 }
-                _           => { run::process_status(program, argv);}
+                _           => {
+                    if argv.len() > 0 && argv[argv.len()-1] == ~"&" {
+                        unsafe { 
+                            let pid = libc::funcs::posix88::unistd::fork();
+                            match pid {
+                                -1 => {
+                                    let err_msg: ~str = 
+                                        fmt!("%s[ ERR ]%s fork failed", CMD_ERR, CMD_ERR_END);
+                                    run::process_status("echo", [~"-e", err_msg]);
+                                }
+                                0 => {
+                                    run::process_status(program, argv);
+                                }
+                                _ => ()
+                            }
+                        }
+                    } else {
+                        run::process_status(program, argv);
+                    }
+                }
             }
         }
     }
