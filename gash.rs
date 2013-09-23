@@ -34,9 +34,6 @@ fn main() {
         let mut carry_in = ~[];
 
         while argv.len() > 0 {
-            // println(~"ARGV: " + argv.to_str());
-            // println(~"current_command: " + current_command.to_str());
-
             let word = argv.remove(0);
 
             match word {
@@ -76,20 +73,16 @@ fn main() {
                     }
                 }
                 _ => {
-                    // print("HIT DEFAULT" + word.to_str());
                     current_command.push(word.clone());
                 }
             }
         }
 
         if current_command.len() > 0 {
-            // println("first branch out");
-            // run::process_status(current_command[0], current_command.slice(1, current_command.len()));
             let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
 
             print(str::from_utf8(process_out));
         } else {
-            // println("second branch out, command:  " + current_command.to_str());
             print(str::from_utf8(carry_in.clone()));
         }
 
