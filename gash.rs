@@ -1,15 +1,16 @@
-use std::{io, run, libc, c_str, str};
+extern mod extra;
+use std::{run, libc, c_str, str, io};
 static CMD_ERR: &'static str = "\\033[38;5;1m";
 static CMD_ERR_END: &'static str = "\\033[39m";
 static CMD_CMD: &'static str = "\\033[38;5;6m";
 static CMD_CMD_END: &'static str = "\\033[39m";
 static CMD_NUM: &'static str = "\\033[38;5;3m";
 static CMD_NUM_END: &'static str = "\\033[39m";
+static CMD_PROMPT: &'static str = "gash";
+static CMD_SEP: &'static str = "≻";
 
 #[fixed_stack_segment]
 fn main() {
-    static CMD_PROMPT: &'static str = "gash";
-    static CMD_SEP: &'static str = "≻";
     let mut CMD_PATH: ~str = ~"";
     let mut HISTORY: ~[~str] = ~[];
 
@@ -27,41 +28,94 @@ fn main() {
         HISTORY.push(line.clone());
         let mut argv: ~[~str] = line.split_iter(' ').filter(|&x| x != "")
             .map(|x| x.to_owned()).collect();
-        println(fmt!("argv %?", argv));
+        //println(fmt!("argv %?", argv));
 
-        if argv.len() > 0 {
-            let program = argv.remove(0);
-            let mut redirect_indices: ~[uint] = ~[];
+        let mut current_command: ~[~str] = ~[];
+        let mut carry_in = ~[];
 
-            let mut i = 0;
-            let mut args = ~"";
-            while i < argv.len() {
-                if argv[i] == ~">" || argv[i] == ~"<" {
-                    redirect_indices.push(i);
+        while argv.len() > 0 {
+            // println(~"ARGV: " + argv.to_str());
+            // println(~"current_command: " + current_command.to_str());
+
+            let word = argv.remove(0);
+
+            match word {
+                ~"<" => {
+                    if argv.len() == 0 {
+                        println("No path/file found!");
+                        break;
+                    }
+
+                    let path = argv.remove(0);
+                    let input = load_file(path);
+                    let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(),input);
+                    carry_in = process_out;
+                    current_command = ~[];
                 }
-                args = args + argv[i];
-                i += 1;
-            }
+                ~">" => {
+                    if argv.len() == 0 {
+                        println("No target path/file found!");
+                        break;
+                    }
 
-            println(process_line(HISTORY.clone(), CMD_PATH.clone(), program, argv, args));
+                    let path = argv.remove(0);
+
+                    let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+
+                    write_file(path, process_out);
+                    carry_in = ~[];
+                    current_command = ~[];
+                }
+                ~"|" => {
+                    if current_command.len() != 0 {
+
+                        let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+
+                        carry_in = process_out;
+                        current_command = ~[];
+                    }
+                }
+                _ => {
+                    // print("HIT DEFAULT" + word.to_str());
+                    current_command.push(word.clone());
+                }
+            }
         }
+
+        if current_command.len() > 0 {
+            // println("first branch out");
+            // run::process_status(current_command[0], current_command.slice(1, current_command.len()));
+            let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+
+            print(str::from_utf8(process_out));
+        } else {
+            // println("second branch out, command:  " + current_command.to_str());
+            print(str::from_utf8(carry_in.clone()));
+        }
+
     }
 }
 
 #[fixed_stack_segment]
-fn process_line(HISTORY: ~[~str], mut CMD_PATH: ~str, program: ~str, argv: ~[~str], args: ~str) -> ~str{
-
-    match program {
-        //~"exit"     => { return; } Handle this case one level up before call
+fn run_command(mut HISTORY: ~[~str], mut CMD_PATH: ~str, prog: ~str, args: ~[~str], input: ~[u8]) -> ~[u8] {
+    let mut ret_val = ~[];
+    match prog {
+        ~"exit"     => {
+            unsafe {
+                libc::exit(0);
+            }
+        }
         ~"cd"       => {
             let orig_dir = str::from_utf8(run::process_output("pwd", []).output);
-            let mycstr: c_str::CString = args.to_c_str();
+
+            let mycstr: c_str::CString = if args.len() > 0 {args[0].to_c_str()} else {orig_dir.to_c_str()};
+
             unsafe { libc::funcs::posix88::unistd::chdir( mycstr.unwrap() ); }
             let new_dir = str::from_utf8(run::process_output("pwd", []).output);
 
             if new_dir==orig_dir {
                 let err_msg: ~str =
-                    fmt!("%s[ ERR ]%s cd: %s: No such file or directory", CMD_ERR, CMD_ERR_END, args);
+                    fmt!("%s[ ERR ]%s cd: %s: No such file or directory", CMD_ERR, CMD_ERR_END, args.to_str());
                 run::process_status("echo", [~"-e", err_msg]);
             } else {
                 CMD_PATH = new_dir.slice_to(new_dir.len()-1).to_owned();
@@ -69,15 +123,16 @@ fn process_line(HISTORY: ~[~str], mut CMD_PATH: ~str, program: ~str, argv: ~[~st
         }
         ~"history"  => {
             let mut i: uint = 0;
+            let mut output = ~"";
             while i<HISTORY.len() {
                 let hist_msg: ~str = fmt!("%s%s%s %s", CMD_NUM, (i+1).to_str(), CMD_NUM_END, HISTORY[i]);
-                run::process_status("echo", [~"-e", hist_msg]);
-
+                output = output + hist_msg + "\r\n";
                 i += 1;
             }
+            ret_val = output.into_bytes();
         }
         _           => {
-            if argv.len() > 0 && argv[argv.len()-1] == ~"&" {
+            if args.len() > 0 && args[args.len()-1] == ~"&" {
                 unsafe {
                     let pid = libc::funcs::posix88::unistd::fork();
                     match pid {
@@ -87,16 +142,36 @@ fn process_line(HISTORY: ~[~str], mut CMD_PATH: ~str, program: ~str, argv: ~[~st
                             run::process_status("echo", [~"-e", err_msg]);
                         }
                         0 => {
-                            run::process_status(program, argv);
+                            run::process_status(prog, args);
                         }
                         _ => ()
                     }
                 }
             } else {
-                run::process_status(program, argv);
+                let mut p = run::Process::new(prog, args, run::ProcessOptions::new());
+                let std_in = p.input();
+                std_in.write(input);
+                let process_out = p.finish_with_output();
+                ret_val = process_out.output
             }
         }
     }
+    ret_val
+}
 
-    ~"HEY"
+fn load_file(pathname : ~str) ->  ~[u8] {
+    let read_result = io::read_whole_file(&PosixPath(pathname));
+    match read_result {
+        Err(msg) => {
+            fail!(fmt!("Error: %?", msg));
+        },
+        Ok(contents) => {
+            return contents;
+        }
+    }
+}
+
+fn write_file(pathname : ~str, contents: ~[u8]) {
+    let writer = io::file_writer(&Path(pathname), [io::Create]).unwrap();
+    writer.write(contents);
 }
