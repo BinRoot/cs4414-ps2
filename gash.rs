@@ -46,7 +46,7 @@ fn main() {
 
                     let path = argv.remove(0);
                     let input = load_file(path);
-                    let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(),input);
+                    let process_out = run_command(HISTORY.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(),input);
                     carry_in = process_out;
                     current_command = ~[];
                 }
@@ -58,7 +58,7 @@ fn main() {
 
                     let path = argv.remove(0);
 
-                    let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+                    let process_out = run_command(HISTORY.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
 
                     write_file(path, process_out);
                     carry_in = ~[];
@@ -67,7 +67,7 @@ fn main() {
                 ~"|" => {
                     if current_command.len() != 0 {
 
-                        let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+                        let process_out = run_command(HISTORY.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
 
                         carry_in = process_out;
                         current_command = ~[];
@@ -81,7 +81,7 @@ fn main() {
 
         if current_command.len() > 0 {
             let args: ~[~str] = current_command.slice(1, current_command.len()).to_owned();
-            let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), args.clone(), carry_in.clone());
+            let process_out = run_command(HISTORY.clone(), current_command[0].clone(), args.clone(), carry_in.clone());
             run::process_status("echo", [~"-e", str::from_utf8(process_out) + "\\c"]);
 //            print(str::from_utf8(process_out));
 
@@ -110,7 +110,7 @@ fn main() {
 }
 
 #[fixed_stack_segment]
-fn run_command(mut HISTORY: ~[~str], mut CMD_PATH: ~str, prog: ~str, args: ~[~str], input: ~[u8]) -> ~[u8] {
+fn run_command(mut HISTORY: ~[~str], prog: ~str, args: ~[~str], input: ~[u8]) -> ~[u8] {
     let mut ret_val = ~[];
     match prog {
         ~"exit"     => {
