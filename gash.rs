@@ -80,10 +80,11 @@ fn main() {
 
         if current_command.len() > 0 {
             let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
-
-            print(str::from_utf8(process_out));
+            run::process_status("echo", [~"-e", str::from_utf8(process_out) + "\\c"]);
+//            print(str::from_utf8(process_out));
         } else {
-            print(str::from_utf8(carry_in.clone()));
+            run::process_status("echo", [~"-e", str::from_utf8(carry_in.clone()) + "\\c"]);
+//            print(str::from_utf8(carry_in.clone()));
         }
 
     }
