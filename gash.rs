@@ -9,6 +9,7 @@ static CMD_NUM_END: &'static str = "\\033[39m";
 static CMD_PROMPT: &'static str = "gash";
 static CMD_SEP: &'static str = "≻";
 
+
 #[fixed_stack_segment]
 fn main() {
     let mut CMD_PATH: ~str = ~"";
@@ -79,9 +80,27 @@ fn main() {
         }
 
         if current_command.len() > 0 {
-            let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), current_command.slice(1, current_command.len()).to_owned(), carry_in.clone());
+            let args: ~[~str] = current_command.slice(1, current_command.len()).to_owned();
+            let process_out = run_command(HISTORY.clone(), CMD_PATH.clone(), current_command[0].clone(), args.clone(), carry_in.clone());
             run::process_status("echo", [~"-e", str::from_utf8(process_out) + "\\c"]);
 //            print(str::from_utf8(process_out));
+
+            match current_command[0] {
+                ~"cd" => { 
+                    let orig_dir = str::from_utf8(run::process_output("pwd", []).output);
+                    let mycstr: c_str::CString = if args.len() > 0 {args[0].to_c_str()} else {orig_dir.to_c_str()};
+                    unsafe { libc::funcs::posix88::unistd::chdir( mycstr.unwrap() ); }
+                    let new_dir = str::from_utf8(run::process_output("pwd", []).output);
+                    if new_dir==orig_dir {
+                        let err_msg: ~str =
+                            fmt!("%s[ ERR ]%s cd: %s: No such file or directory", CMD_ERR, CMD_ERR_END, args.to_str());
+                        run::process_status("echo", [~"-e", err_msg]);
+                    } else {
+                        CMD_PATH = new_dir.slice_to(new_dir.len()-1).to_owned();
+                    }
+                },
+                _     => ()
+            }
         } else {
             run::process_status("echo", [~"-e", str::from_utf8(carry_in.clone()) + "\\c"]);
 //            print(str::from_utf8(carry_in.clone()));
@@ -97,22 +116,6 @@ fn run_command(mut HISTORY: ~[~str], mut CMD_PATH: ~str, prog: ~str, args: ~[~st
         ~"exit"     => {
             unsafe {
                 libc::exit(0);
-            }
-        }
-        ~"cd"       => {
-            let orig_dir = str::from_utf8(run::process_output("pwd", []).output);
-
-            let mycstr: c_str::CString = if args.len() > 0 {args[0].to_c_str()} else {orig_dir.to_c_str()};
-
-            unsafe { libc::funcs::posix88::unistd::chdir( mycstr.unwrap() ); }
-            let new_dir = str::from_utf8(run::process_output("pwd", []).output);
-
-            if new_dir==orig_dir {
-                let err_msg: ~str =
-                    fmt!("%s[ ERR ]%s cd: %s: No such file or directory", CMD_ERR, CMD_ERR_END, args.to_str());
-                run::process_status("echo", [~"-e", err_msg]);
-            } else {
-                CMD_PATH = new_dir.slice_to(new_dir.len()-1).to_owned();
             }
         }
         ~"history"  => {
